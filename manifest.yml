@@ -8,3 +8,5 @@ applications:
     - route: pal-tracker-sjr.cfapps.io
   env:
     WELCOME_MESSAGE: Hello from the review environment
+  services:
+    - tracker-database
