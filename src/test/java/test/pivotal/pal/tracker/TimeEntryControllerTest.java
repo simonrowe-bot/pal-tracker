@@ -5,10 +5,13 @@ import io.pivotal.pal.tracker.TimeEntryController;
 import io.pivotal.pal.tracker.TimeEntryRepository;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.boot.actuate.metrics.CounterService;
+import org.springframework.boot.actuate.metrics.GaugeService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 
 import static java.util.Arrays.asList;
@@ -19,12 +22,16 @@ import static org.mockito.Mockito.*;
 
 public class TimeEntryControllerTest {
     private TimeEntryRepository timeEntryRepository;
+    private CounterService counterService;
+    private GaugeService gaugeService;
     private TimeEntryController controller;
 
     @Before
     public void setUp() throws Exception {
         timeEntryRepository = mock(TimeEntryRepository.class);
-        controller = new TimeEntryController(timeEntryRepository);
+        counterService = mock(CounterService.class);
+        gaugeService = mock(GaugeService.class);
+        controller = new TimeEntryController(timeEntryRepository,counterService, gaugeService);
     }
 
     @Test
@@ -34,12 +41,16 @@ public class TimeEntryControllerTest {
         doReturn(expectedResult)
             .when(timeEntryRepository)
             .create(any(TimeEntry.class));
+        doReturn(Arrays.asList(expectedResult))
+                .when(timeEntryRepository).list();
 
 
         ResponseEntity response = controller.create(timeEntryToCreate);
 
 
         verify(timeEntryRepository).create(timeEntryToCreate);
+        verify(counterService).increment("TimeEntry.created");
+        verify(gaugeService).submit("timeEntries.count", 1);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getBody()).isEqualTo(expectedResult);
     }
@@ -52,7 +63,7 @@ public class TimeEntryControllerTest {
             .find(1L);
 
         ResponseEntity<TimeEntry> response = controller.read(1L);
-
+        verify(counterService).increment("TimeEntry.read");
         verify(timeEntryRepository).find(1L);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(expected);
@@ -63,7 +74,7 @@ public class TimeEntryControllerTest {
         doReturn(null)
             .when(timeEntryRepository)
             .find(1L);
-
+        verify(counterService,never()).increment("TimeEntry.created");
         ResponseEntity<TimeEntry> response = controller.read(1L);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -79,6 +90,7 @@ public class TimeEntryControllerTest {
         ResponseEntity<List<TimeEntry>> response = controller.list();
 
         verify(timeEntryRepository).list();
+        verify(counterService).increment("TimeEntry.listed");
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(expected);
     }
@@ -93,6 +105,7 @@ public class TimeEntryControllerTest {
         ResponseEntity response = controller.update(1L, expected);
 
         verify(timeEntryRepository).update(1L, expected);
+        verify(counterService).increment("TimeEntry.updated");
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo(expected);
     }
@@ -104,13 +117,18 @@ public class TimeEntryControllerTest {
             .update(eq(1L), any(TimeEntry.class));
 
         ResponseEntity response = controller.update(1L, new TimeEntry());
+        verify(counterService, never()).increment("TimeEntry.updated");
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
     public void testDelete() throws Exception {
+        doReturn(Arrays.asList())
+                .when(timeEntryRepository).list();
         ResponseEntity<TimeEntry> response = controller.delete(1L);
         verify(timeEntryRepository).delete(1L);
+        verify(counterService).increment("TimeEntry.deleted");
+        verify(gaugeService).submit("timeEntries.count", 0);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     }
 }
